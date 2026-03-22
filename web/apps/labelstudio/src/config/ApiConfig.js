@@ -44,6 +44,7 @@ export const API_CONFIG = {
     importFiles: "POST:/projects/:pk/import",
     reimportFiles: "POST:/projects/:pk/reimport",
     dataSummary: "/projects/:pk/summary",
+    dmColumns: "/dm/columns",
 
     // DM
     deleteTabs: "DELETE:/dm/views/reset",

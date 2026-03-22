@@ -296,6 +296,7 @@ class ProjectSerializer(FlexFieldsModelSerializer):
             'total_annotations_number',
             'total_predictions_number',
             'sampling',
+            'sampling_sort_fields',
             'show_ground_truth_first',
             'annotator_evaluation_enabled',
             'show_overlap_first',

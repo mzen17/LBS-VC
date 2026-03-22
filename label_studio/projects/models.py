@@ -313,14 +313,22 @@ class Project(ProjectMixin, FsmHistoryStateModel):
     SEQUENCE = 'Sequential sampling'
     UNIFORM = 'Uniform sampling'
     UNCERTAINTY = 'Uncertainty sampling'
+    SORTED = 'Sorted sequential sampling'
 
     SAMPLING_CHOICES = (
         (SEQUENCE, 'Tasks are ordered by Data manager ordering'),
         (UNIFORM, 'Tasks are chosen randomly'),
         (UNCERTAINTY, 'Tasks are chosen according to model uncertainty scores (active learning mode)'),
+        (SORTED, 'Tasks are sorted by user-specified task data fields'),
     )
 
     sampling = models.CharField(max_length=100, choices=SAMPLING_CHOICES, null=True, default=SEQUENCE)
+    sampling_sort_fields = models.JSONField(
+        _('sampling sort fields'),
+        default=list,
+        blank=True,
+        help_text='Ordered list of {field, direction} specs for Sorted sequential sampling',
+    )
     skip_queue = models.CharField(
         max_length=100, choices=SkipQueue.choices, null=True, default=SkipQueue.REQUEUE_FOR_OTHERS
     )

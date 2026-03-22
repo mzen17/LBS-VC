@@ -72,7 +72,8 @@ declare type APIProject = {
 
   /** Total predictions number in project including skipped_annotations_number and ground_truth_number. */
   total_predictions_number?: string;
-  sampling?: "Sequential sampling" | "Uniform sampling" | "Uncertainty sampling" | null;
+  sampling?: "Sequential sampling" | "Uniform sampling" | "Uncertainty sampling" | "Sorted sequential sampling" | null;
+  sampling_sort_fields?: Array<{ field: string; direction: "asc" | "desc" }> | null;
   annotator_evaluation_enabled?: boolean;
   show_overlap_first?: boolean;
   overlap_cohort_percentage?: number;

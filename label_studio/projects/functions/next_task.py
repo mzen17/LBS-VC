@@ -45,6 +45,31 @@ def get_next_task_logging_level(user: User) -> int:
     return level
 
 
+def _apply_sorted_sampling_order(tasks: QuerySet[Task], project: Project) -> QuerySet[Task]:
+    """Order tasks by the project's sampling_sort_fields list.
+
+    Each entry in sampling_sort_fields is a dict like {'field': 'author', 'direction': 'asc'}.
+    Fields are looked up via Django's JSON traversal syntax (data__<field>).
+    Falls back to sequential (id) ordering when no valid fields are configured.
+    """
+    sort_specs = project.sampling_sort_fields or []
+    order_expressions = []
+    for spec in sort_specs:
+        field = (spec.get('field') or '').strip()
+        direction = spec.get('direction', 'asc')
+        if not field:
+            continue
+        json_path = f'data__{field}'
+        if direction == 'desc':
+            order_expressions.append(F(json_path).desc(nulls_last=True))
+        else:
+            order_expressions.append(F(json_path).asc(nulls_last=True))
+
+    if order_expressions:
+        return tasks.order_by(*order_expressions)
+    return tasks.order_by('id')
+
+
 def _get_random_unlocked(task_query: QuerySet[Task], user: User, upper_limit=None) -> Union[Task, None]:
     for task in task_query.order_by('?').only('id')[: settings.RANDOM_NEXT_TASK_SAMPLE_SIZE]:
         try:
@@ -404,6 +429,13 @@ def get_task_from_qs_with_sampling(
         next_task = _get_random_unlocked(not_solved_tasks, user)
         if next_task:
             queue_info += (' & ' if queue_info else '') + 'Uniform random queue'
+
+    elif project.sampling == project.SORTED:
+        logger.debug(f'User={user} tries sorted sequential sampling from prepared tasks')
+        sorted_tasks = _apply_sorted_sampling_order(not_solved_tasks, project)
+        next_task = _get_first_unlocked(sorted_tasks, user)
+        if next_task:
+            queue_info += (' & ' if queue_info else '') + 'Sorted sequential queue'
 
     return next_task, queue_info
 

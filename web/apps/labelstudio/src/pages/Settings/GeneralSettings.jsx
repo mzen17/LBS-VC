@@ -10,11 +10,113 @@ import { FF_LSDV_E_297, FF_WORKSPACES, isFF } from "../../utils/feature-flags";
 import { createURL } from "../../components/HeidiTips/utils";
 import { useAPI } from "../../providers/ApiProvider";
 
+const SORTED_SAMPLING = "Sorted sequential sampling";
+
+const DIRECTION_OPTIONS = [
+  { value: "asc", label: "A → Z" },
+  { value: "desc", label: "Z → A" },
+];
+
+function SortFieldsEditor({ sortFields, onChange, columnOptions }) {
+  const addField = () => onChange([...sortFields, { field: "", direction: "asc" }]);
+  const updateField = (index, key, val) =>
+    onChange(sortFields.map((f, i) => (i === index ? { ...f, [key]: val } : f)));
+  const removeField = (index) => onChange(sortFields.filter((_, i) => i !== index));
+
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        padding: "1rem",
+        border: "1px solid var(--color-neutral-border)",
+        borderRadius: "0.5rem",
+        background: "var(--color-neutral-surface)",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 500,
+          color: "var(--color-neutral-content)",
+          marginBottom: sortFields.length > 0 ? "0.75rem" : "0.5rem",
+        }}
+      >
+        Sort fields{" "}
+        <span style={{ fontWeight: 400, color: "var(--color-neutral-content-subtler)" }}>
+          — applied in order
+        </span>
+      </div>
+
+      {sortFields.length === 0 && (
+        <div
+          style={{
+            fontSize: 14,
+            color: "var(--color-neutral-content-subtler)",
+            marginBottom: "0.75rem",
+          }}
+        >
+          No fields configured — tasks will fall back to ID ordering.
+        </div>
+      )}
+
+      {sortFields.map((spec, index) => (
+        <div
+          key={index}
+          style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}
+        >
+          <span
+            style={{
+              minWidth: 18,
+              fontSize: 12,
+              color: "var(--color-neutral-content-subtler)",
+              textAlign: "right",
+              flexShrink: 0,
+            }}
+          >
+            {index + 1}.
+          </span>
+          <Select
+            options={columnOptions}
+            value={spec.field || null}
+            placeholder="Select a field…"
+            searchable
+            searchPlaceholder="Search fields…"
+            onChange={(val) => updateField(index, "field", val ?? "")}
+            style={{ flex: 1 }}
+          />
+          <Select
+            options={DIRECTION_OPTIONS}
+            value={spec.direction}
+            onChange={(val) => updateField(index, "direction", val)}
+            style={{ width: 110, flexShrink: 0 }}
+          />
+          <Button
+            type="button"
+            look="string"
+            size="small"
+            onClick={() => removeField(index)}
+            style={{ color: "var(--color-neutral-content-subtler)", flexShrink: 0, padding: "0 4px" }}
+          >
+            ✕
+          </Button>
+        </div>
+      ))}
+
+      <Button type="button" look="outlined" size="small" onClick={addField} style={{ marginTop: 4 }}>
+        + Add field
+      </Button>
+    </div>
+  );
+}
+
 export const GeneralSettings = () => {
   const { project, fetchProject } = useContext(ProjectContext);
   const api = useAPI();
   const [workspaces, setWorkspaces] = useState([]);
   const [selectedWorkspace, setSelectedWorkspace] = useState(project.workspace ?? null);
+  const [currentSampling, setCurrentSampling] = useState(project.sampling ?? "Sequential sampling");
+  const [sortFields, setSortFields] = useState(project.sampling_sort_fields ?? []);
+  const [columnOptions, setColumnOptions] = useState([]);
 
   useEffect(() => {
     if (isFF(FF_WORKSPACES)) {
@@ -25,18 +127,40 @@ export const GeneralSettings = () => {
   }, []);
 
   useEffect(() => {
+    if (!project.id) return;
+    api.callApi("dmColumns", { params: { project: project.id } }).then((data) => {
+      const opts = (data?.columns ?? [])
+        .filter((c) => c.parent === "data")
+        .map((c) => ({ value: c.id, label: c.title ?? c.id }));
+      setColumnOptions(opts);
+    });
+  }, [project.id]);
+
+  useEffect(() => {
     setSelectedWorkspace(project.workspace ?? null);
   }, [project.workspace]);
 
-  const updateProject = useCallback(() => {
-    if (project.id) fetchProject(project.id, true);
-  }, [project]);
+  useEffect(() => {
+    setCurrentSampling(project.sampling ?? "Sequential sampling");
+    setSortFields(project.sampling_sort_fields ?? []);
+  }, [project.sampling, project.sampling_sort_fields]);
+
+  const updateProject = useCallback(async () => {
+    if (!project.id) return;
+    // Save sampling_sort_fields whenever the main form saves
+    await api.callApi("updateProject", {
+      params: { pk: project.id },
+      body: { sampling_sort_fields: sortFields },
+    });
+    fetchProject(project.id, true);
+  }, [project, sortFields]);
 
   const colors = ["#FDFDFC", "#FF4C25", "#FF750F", "#ECB800", "#9AC422", "#34988D", "#617ADA", "#CC6FBE"];
 
   const samplings = [
     { value: "Sequential", label: "Sequential", description: "Tasks are ordered by Task ID" },
     { value: "Uniform", label: "Random", description: "Tasks are chosen with uniform random" },
+    { value: "Sorted sequential", label: "Sorted sequential", description: "Tasks are sorted by specified task data fields" },
   ];
 
   const workspaceOptions = [
@@ -99,7 +223,13 @@ export const GeneralSettings = () => {
                 ))}
               </RadioGroup>
 
-              <RadioGroup label="Task Sampling" labelProps={{ size: "large" }} name="sampling" simple>
+              <RadioGroup
+                label="Task Sampling"
+                labelProps={{ size: "large" }}
+                name="sampling"
+                simple
+                onChange={(value) => setCurrentSampling(value)}
+              >
                 {samplings.map(({ value, label, description }) => (
                   <RadioGroup.Button
                     key={value}
@@ -145,6 +275,10 @@ export const GeneralSettings = () => {
                   />
                 )}
               </RadioGroup>
+
+              {currentSampling === SORTED_SAMPLING && (
+                <SortFieldsEditor sortFields={sortFields} onChange={setSortFields} columnOptions={columnOptions} />
+              )}
             </Form.Row>
 
             <Form.Actions>

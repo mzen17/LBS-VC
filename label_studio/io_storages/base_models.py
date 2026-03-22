@@ -92,13 +92,17 @@ class StorageInfo(models.Model):
         self.save(update_fields=['last_sync_job', 'last_sync', 'last_sync_count', 'status', 'meta'])
 
     def info_set_queued(self):
-        if settings.DJANGO_DB == settings.DJANGO_DB_SQLITE:
-            self._update_queued_status()
-            return True
+        # SQLite doesn't support SELECT FOR UPDATE, but transaction.atomic() still
+        # serializes writes via SQLite's database-level locking, preventing concurrent
+        # syncs from bypassing the status check and creating duplicate tasks.
+        use_select_for_update = settings.DJANGO_DB != settings.DJANGO_DB_SQLITE
 
         with transaction.atomic():
             try:
-                locked_storage = self.__class__.objects.select_for_update().get(pk=self.pk)
+                qs = self.__class__.objects
+                if use_select_for_update:
+                    qs = qs.select_for_update()
+                locked_storage = qs.get(pk=self.pk)
             except self.__class__.DoesNotExist:
                 logger.error(f'Storage {self.__class__.__name__} with pk={self.pk} does not exist')
                 return False
@@ -114,8 +118,8 @@ class StorageInfo(models.Model):
 
             locked_storage._update_queued_status()
 
-            self.refresh_from_db()
-            return True
+        self.refresh_from_db()
+        return True
 
     def info_set_in_progress(self):
         # only QUEUED => IN_PROGRESS transition is possible, because in QUEUED we reset states

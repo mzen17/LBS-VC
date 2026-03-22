@@ -181,7 +181,7 @@ DATABASES_ALL = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': DATABASE_NAME,
         'OPTIONS': {
-            # 'timeout': 20,
+            'timeout': 20,
         },
     },
 }
