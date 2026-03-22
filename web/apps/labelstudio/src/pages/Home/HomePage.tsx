@@ -1,7 +1,7 @@
-import { IconExternal, IconFolderAdd, IconHumanSignal, IconUserAdd, IconFolderOpen } from "@humansignal/icons";
+import { IconExternal, IconFolderAdd, IconHumanSignal, IconUserAdd, IconFolderOpen, IconGrid } from "@humansignal/icons";
 import { Button, SimpleCard, Spinner, Tooltip, Typography } from "@humansignal/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useUpdatePageTitle } from "@humansignal/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
@@ -10,6 +10,7 @@ import { useAPI } from "../../providers/ApiProvider";
 import { CreateProject } from "../CreateProject/CreateProject";
 import { InviteLink } from "../Organization/PeoplePage/InviteLink";
 import type { Page } from "../types/Page";
+import { FF_WORKSPACES, isFF } from "../../utils/feature-flags";
 import {
   creationDialogOpen,
   invitationOpen,
@@ -70,6 +71,15 @@ export const HomePage: Page = () => {
 
   useUpdatePageTitle("Home");
 
+  // Fetch workspaces (only when FF is active)
+  const { data: workspacesData } = useQuery({
+    queryKey: ["workspaces"],
+    async queryFn() {
+      return api.callApi<{ results: APIWorkspace[] } | APIWorkspace[]>("workspaces");
+    },
+    enabled: isFF(FF_WORKSPACES),
+  });
+
   // Fetch regular projects
   const { data, isFetching, isSuccess, isError } = useQuery({
     queryKey: ["projects", { page_size: PROJECTS_TO_SHOW }],
@@ -117,6 +127,29 @@ export const HomePage: Page = () => {
     }
   }, [data?.results, visitedProjectsData?.results, setProjectsData]);
 
+  const workspaces: APIWorkspace[] = useMemo(() => {
+    if (!workspacesData) return [];
+    return Array.isArray(workspacesData) ? workspacesData : (workspacesData.results ?? []);
+  }, [workspacesData]);
+
+  // Group recent projects by their workspace (only workspaces that appear in recent projects)
+  const recentWorkspaceGroups = useMemo(() => {
+    if (!isFF(FF_WORKSPACES) || workspaces.length === 0 || sortedProjects.length === 0) return [];
+
+    const wsMap = new Map(workspaces.map((ws) => [ws.id, ws]));
+    const groups = new Map<number, { workspace: APIWorkspace; projects: APIProject[] }>();
+
+    for (const project of sortedProjects) {
+      if (project.workspace == null) continue;
+      const ws = wsMap.get(project.workspace);
+      if (!ws) continue;
+      if (!groups.has(ws.id)) groups.set(ws.id, { workspace: ws, projects: [] });
+      groups.get(ws.id)!.projects.push(project);
+    }
+
+    return Array.from(groups.values());
+  }, [workspaces, sortedProjects]);
+
   const handleActions = (action: Action) => {
     return () => {
       switch (action) {
@@ -158,6 +191,25 @@ export const HomePage: Page = () => {
               );
             })}
           </div>
+
+          {isFF(FF_WORKSPACES) && recentWorkspaceGroups.length > 0 && (
+            <SimpleCard
+              title={
+                <>
+                  Recent Workspaces{" "}
+                  <a href="/workspaces" className="text-lg font-normal hover:underline">
+                    View All
+                  </a>
+                </>
+              }
+            >
+              <div className="flex flex-col gap-4">
+                {recentWorkspaceGroups.map(({ workspace, projects }) => (
+                  <WorkspaceRecentGroup key={workspace.id} workspace={workspace} projects={projects} />
+                ))}
+              </div>
+            </SimpleCard>
+          )}
 
           <SimpleCard
             title={
@@ -241,6 +293,30 @@ export const HomePage: Page = () => {
 HomePage.title = "Home";
 HomePage.path = "/";
 HomePage.exact = true;
+
+function WorkspaceRecentGroup({ workspace, projects }: { workspace: APIWorkspace; projects: APIProject[] }) {
+  const white = "#FFFFFF";
+  const color = workspace.color && workspace.color !== white ? workspace.color : undefined;
+
+  return (
+    <div>
+      <Link
+        to="/workspaces"
+        className="flex items-center gap-2 mb-1 px-1 text-neutral-content-subtle hover:text-neutral-content"
+        data-external
+      >
+        <IconGrid className="w-4 h-4 shrink-0" style={color ? { color } : undefined} />
+        <span className="font-semibold text-sm truncate">{workspace.title}</span>
+        <span className="text-xs text-neutral-content-subtler ml-auto shrink-0">{projects.length} project{projects.length !== 1 ? "s" : ""}</span>
+      </Link>
+      <div className="flex flex-col gap-0.5 pl-6">
+        {projects.map((project) => (
+          <ProjectSimpleCard key={project.id} project={project} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function ProjectSimpleCard({ project }: { project: APIProject }) {
   const finished = project.finished_task_number ?? 0;
