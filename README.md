@@ -9,4 +9,6 @@ Used tokens: 25k, Sonnet 4.6
 - Fix 2: 4k tokens; add the Recent Workspaces onto the frontend
 
 ### To be tested features
-- Mobile app for annotating on a phone
+- Mobile view for annotating on a phone (completely new)
+- Parquet Import (premium)
+- Advanced sampling (ordered by ID, etc)
