@@ -15,6 +15,12 @@ Used tokens: 20k (BASE), Sonnet 4.6
 - Fix 1: 7k tokens; not following the theme
 - Fix 2: 4k tokens; input is not dropdown (it should come from existing columns, and also did not follow match the theme.
 
+### Feat Test 3: Merge Tasks
+<img width="768" height="1133" alt="image" src="https://github.com/user-attachments/assets/0c0e15e0-fd92-4c5c-9f46-6d37ddab99c1" />
+
+Used Tokens: 15k (BASE), Sonnet 4.6.
+- One-shotted.
+
 ### To be tested features
 - Mobile view for annotating on a phone (completely new)
 - Parquet Import (premium)
